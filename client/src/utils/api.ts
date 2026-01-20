@@ -8,29 +8,21 @@
  * All API calls should use '/api' prefix (e.g., '/api/servers', '/api/teams')
  */
 
-const getAuthHeaders = (token?: string): Record<string, string> => {
-  const authToken = token || localStorage.getItem('api_token');
-
-  if (!authToken) {
-    return {};
-  }
-
-  return {
-    Authorization: `Bearer ${authToken}`,
-    'Content-Type': 'application/json',
-  };
-};
-
 export const api = {
   /**
    * Make an authenticated API request
    */
   async fetch(endpoint: string, options: RequestInit = {}) {
+    const { headers, ...rest } = options;
     const response = await fetch(endpoint, {
-      ...options,
+      // Always send cookies (admin session + player cookie) by default so
+      // admin-only routes like /api/maps work correctly. Callers can still
+      // override this by passing credentials in options if needed.
+      credentials: options.credentials ?? 'include',
+      ...rest,
       headers: {
-        ...getAuthHeaders(),
-        ...options.headers,
+        'Content-Type': 'application/json',
+        ...(headers || {}),
       },
     });
 
@@ -86,17 +78,4 @@ export const api = {
     return this.fetch(endpoint, { method: 'DELETE' });
   },
 
-  /**
-   * Verify authentication token
-   */
-  async verifyToken(token: string): Promise<boolean> {
-    try {
-      const response = await fetch('/api/auth/verify', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  },
 };

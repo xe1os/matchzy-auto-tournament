@@ -104,19 +104,9 @@ export class MatchAllocationService {
     const statusChecks = await Promise.all(
       enabledServers.map(async (server) => {
         try {
-          const connectionResult = await rconService.testConnection(server.id);
-
-          if (!connectionResult.success) {
-            return {
-              server,
-              status: null as ServerStatus | null,
-              matchSlug: null as string | null,
-              updatedAt: null as number | null,
-              online: false,
-            };
-          }
-
-          const serverStatus = await serverStatusService.getServerStatus(server.id);
+          // Use the short-lived status cache for availability checks so we don't
+          // block the entire API on fresh RCON calls every time the UI polls.
+          const serverStatus = await serverStatusService.getServerStatus(server.id, true);
           return {
             server,
             ...serverStatus,
@@ -241,6 +231,10 @@ export class MatchAllocationService {
       });
     }
 
+    // How many matches are currently waiting for servers (ready + no server_id)
+    const readyMatches = await this.getReadyMatches();
+    const requiredServerCount = readyMatches.length;
+
     // This method is called both by UI endpoints and allocator helpers; only
     // emit a summary when there is contention so logs stay readable.
     if (requiredServerCount > 0 && availableServerCount === 0) {
@@ -256,10 +250,6 @@ export class MatchAllocationService {
         );
       }
     }
-
-    // How many matches are currently waiting for servers (ready + no server_id)
-    const readyMatches = await this.getReadyMatches();
-    const requiredServerCount = readyMatches.length;
 
     return {
       availableServerCount,
@@ -1045,6 +1035,38 @@ export class MatchAllocationService {
     log.info(`Tournament: ${tournament.name} (${tournament.type}, ${tournament.format})`);
     log.info(`Current status: ${tournament.status}`);
     log.info(`Teams: ${tournament.teamIds.length}`);
+
+    // Hard safety check: ensure all referenced teams still exist at the moment
+    // the tournament is started. This prevents brackets from silently using
+    // "ghost" teams that were deleted or renamed after initial setup.
+    if (tournament.type !== 'shuffle' && tournament.teamIds.length > 0) {
+      const teamIds = tournament.teamIds;
+      const placeholders = teamIds.map(() => '?').join(',');
+      const existingTeams = await db.queryAsync<{ id: string }>(
+        `SELECT id FROM teams WHERE id IN (${placeholders})`,
+        teamIds
+      );
+      const existingIds = new Set(existingTeams.map((t) => t.id));
+      const missingIds = teamIds.filter((id) => !existingIds.has(id));
+
+      if (missingIds.length > 0) {
+        const message =
+          missingIds.length === 1
+            ? `Cannot start tournament: team '${missingIds[0]}' no longer exists. Update the Teams list on the tournament setup page and regenerate the bracket.`
+            : `Cannot start tournament: ${missingIds.length} teams referenced by this tournament no longer exist (${missingIds.join(
+                ', '
+              )}). Update the Teams list on the tournament setup page and regenerate the bracket.`;
+
+        log.warn('[TOURNAMENT] Start rejected due to missing teams', { missingIds });
+        return {
+          success: false,
+          message,
+          allocated: 0,
+          failed: 0,
+          results: [],
+        };
+      }
+    }
 
     if (tournament.status === 'completed') {
       log.warn('Tournament is already completed');

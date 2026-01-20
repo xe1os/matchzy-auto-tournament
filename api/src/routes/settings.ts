@@ -27,10 +27,11 @@ const mapSettingsResponse = async () => {
   const matchzyKnifeEnabledDefault = await settingsService.isKnifeRoundEnabledByDefault();
   const ratingsEnabled = await settingsService.areRatingsEnabled();
   const matchzyDebugChatEnabled = await settingsService.isMatchzyDebugChatEnabled();
+  const allowSelfRegister = await settingsService.isSelfRegistrationAllowed();
 
   return {
     webhookUrl,
-    steamApiKey,
+    steamApiKey: null,
     steamApiKeySet: Boolean(steamApiKey),
     webhookConfigured: Boolean(webhookUrl),
     defaultPlayerElo,
@@ -41,6 +42,7 @@ const mapSettingsResponse = async () => {
     matchzyKnifeEnabledDefault,
     ratingsEnabled,
     matchzyDebugChatEnabled,
+    allowSelfRegister,
   };
 };
 
@@ -54,7 +56,6 @@ router.get('/', async (_req: Request, res: Response) => {
 router.put('/', async (req: Request, res: Response) => {
   const {
     webhookUrl,
-    steamApiKey,
     simulateMatches,
     simulationTimescale,
     matchzyChatPrefix,
@@ -62,9 +63,9 @@ router.put('/', async (req: Request, res: Response) => {
     matchzyKnifeEnabledDefault,
     ratingsEnabled,
     matchzyDebugChatEnabled,
+    allowSelfRegister,
   } = req.body as {
     webhookUrl?: unknown;
-    steamApiKey?: unknown;
     simulateMatches?: unknown;
     simulationTimescale?: unknown;
     matchzyChatPrefix?: unknown;
@@ -72,6 +73,7 @@ router.put('/', async (req: Request, res: Response) => {
     matchzyKnifeEnabledDefault?: unknown;
     ratingsEnabled?: unknown;
     matchzyDebugChatEnabled?: unknown;
+    allowSelfRegister?: unknown;
   };
 
   try {
@@ -82,19 +84,9 @@ router.put('/', async (req: Request, res: Response) => {
           error: 'webhookUrl must be a string or null',
         });
       }
-      await settingsService.setSetting('webhook_url', typeof webhookUrl === 'string' ? webhookUrl : null);
-    }
-
-    if (steamApiKey !== undefined) {
-      if (typeof steamApiKey !== 'string' && steamApiKey !== null) {
-        return res.status(400).json({
-          success: false,
-          error: 'steamApiKey must be a string or null',
-        });
-      }
       await settingsService.setSetting(
-        'steam_api_key',
-        typeof steamApiKey === 'string' ? steamApiKey : null
+        'webhook_url',
+        typeof webhookUrl === 'string' ? webhookUrl : null
       );
     }
 
@@ -212,6 +204,20 @@ router.put('/', async (req: Request, res: Response) => {
           : '0';
 
       await settingsService.setSetting('matchzy_debug_chat', value);
+    }
+
+    if (allowSelfRegister !== undefined) {
+      if (typeof allowSelfRegister !== 'boolean' && allowSelfRegister !== null) {
+        return res.status(400).json({
+          success: false,
+          error: 'allowSelfRegister must be a boolean or null',
+        });
+      }
+
+      const value =
+        allowSelfRegister === null ? null : allowSelfRegister === true ? '1' : '0';
+
+      await settingsService.setSetting('allow_self_register', value);
     }
 
     return res.json({

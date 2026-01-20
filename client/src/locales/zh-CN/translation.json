@@ -9,6 +9,7 @@
     "matches": "比赛",
     "teams": "战队",
     "players": "选手",
+    "leaderboard": "排行榜",
     "servers": "服务器",
     "maps": "地图与地图池",
     "templates": "模板",
@@ -65,18 +66,23 @@
   "login": {
     "title": "登录",
     "welcome": "欢迎回来",
-    "subtitle": "请输入管理员 API Token 以管理锦标赛、服务器和战队。",
-    "apiTokenLabel": "API Token",
-    "apiTokenPlaceholder": "输入你的 API Token",
-    "passwordRequired": "密码为必填项",
-    "invalidPassword": "密码无效，请检查你的 API Token。",
-    "connectionFailed": "无法连接到 API，请稍后重试。",
+    "subtitle": "使用你偏好的身份提供商登录以管理锦标赛、服务器和战队。",
+    "apiTokenLabel": "登录方式",
+    "apiTokenPlaceholder": "选择一个提供商继续",
+    "passwordRequired": "需要选择登录方式",
+    "invalidPassword": "登录失败，请重试。",
+    "connectionFailed": "无法连接到身份验证服务，请稍后重试。",
     "signIn": "登录",
     "signingIn": "正在登录…",
-    "needToken": "需要获取 Token 或查看使用说明？",
     "github": "GitHub",
     "documentation": "文档",
     "version": "版本"
+  },
+  "connectSteam": {
+    "title": "关联你的 Steam 账号",
+    "bodyIntro": "快完成了。要使用当前账号访问锦标赛平台（例如通过 Discord、Keycloak 或 GitHub 登录后），你需要先关联一个 Steam 个人资料。",
+    "bodyRequirement": "关联 Steam 让系统能够将你识别为选手，并且是从非 Steam 提供商登录时的必备步骤。",
+    "button": "使用 Steam 关联"
   },
   "notFound": {
     "title": "页面未找到",
@@ -152,10 +158,8 @@
     "openPlayerPageTooltip": "打开选手页面",
     "skillRatingTooltip": "Skill Rating 基于 OpenSkill，数值越高越好。",
     "skillRatingLabel": "Skill Rating：{{elo}}",
-    "matchesCount": {
-      "one": "{{count}} 场比赛",
-      "other": "{{count}} 场比赛"
-    }
+    "matchesCount_one": "{{count}} 场比赛",
+    "matchesCount_other": "{{count}} 场比赛"
   },
   "teamModal": {
     "titleCreate": "创建战队",
@@ -192,6 +196,7 @@
     },
     "success": {
       "playerAdded": "选手已添加到战队",
+      "playerReplaced": "选手已被替换",
       "teamUpdated": "战队更新成功",
       "teamCreated": "战队创建成功",
       "teamDeleted": "战队删除成功"
@@ -206,7 +211,9 @@
     "confirmDelete": {
       "title": "删除战队",
       "message": "确定要删除 “{{name}}” 吗？该操作无法撤销。"
-    }
+    },
+    "replacePlayerAria": "替换选手 {{name}}",
+    "replacePlayerTooltip": "替换此选手"
   },
   "playerModal": {
     "titleCreate": "创建选手",
@@ -456,6 +463,10 @@
   "dashboard": {
     "title": "控制台",
     "notReady": "当锦标赛开始后，锦标赛控制台将显示在这里。",
+    "restartTournament": {
+      "button": "重启锦标赛比赛",
+      "restarting": "正在重启锦标赛比赛…"
+    },
     "onboarding": {
       "ready": "🎉 一切就绪！",
       "gettingStarted": "快速开始",
@@ -562,9 +573,10 @@
     "title": "设置",
     "intro": "配置核心集成、游戏内默认值以及开发者选项。",
     "tabs": {
-      "integrations": "集成",
-      "matchRating": "比赛与评分",
-      "developer": "开发者"
+      "integrations": "集成与 Webhook",
+      "players": "选手与访问控制",
+      "matches": "比赛与评分",
+      "developer": "开发者 / 模拟"
     },
     "integrations": {
       "webhook": {

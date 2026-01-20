@@ -45,20 +45,60 @@ import manualMatchTemplatesRoutes from './routes/manualMatchTemplates';
 import playersRoutes from './routes/players';
 import eloTemplatesRoutes from './routes/eloTemplates';
 import testRoutes from './routes/test';
-import authSteamRoutes from './routes/authSteam';
+import authRoutes from './routes/auth';
 import { recoverActiveMatches } from './services/matchRecoveryService';
 import { matchAllocationService } from './services/matchAllocationService';
 import packageJson from '../package.json';
+import { configurePassportAuth, passport } from './config/passport';
+import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 3000;
+
+// Configure Passport strategies
+configurePassportAuth();
 
 // Middleware
 app.use(cors());
 // Increase body size limit to 50MB for image uploads (base64 encoded images can be large)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Session + Passport
+const sessionSecret = process.env.SESSION_SECRET || 'matchzy-dev-session-secret';
+const PgSession = connectPgSimple(session);
+
+// Reuse the same connection string logic as the main DatabaseManager so the
+// session store talks to the exact same PostgreSQL instance with known‑good
+// credentials. This avoids subtle mismatches when DATABASE_URL is unset or
+// when individual DB_* env vars are used instead.
+const sessionDbConnectionString =
+  process.env.DATABASE_URL ||
+  `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || 'postgres'}@${
+    process.env.DB_HOST || '127.0.0.1'
+  }:${process.env.DB_PORT || '5432'}/${process.env.DB_NAME || 'matchzy_tournament'}`;
+
+app.use(
+  session({
+    // Persist sessions in PostgreSQL so admin logins survive API restarts.
+    store: new PgSession({
+      conString: sessionDbConnectionString,
+      tableName: 'session',
+      createTableIfMissing: true,
+    }),
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    },
+  })
+);
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -233,40 +273,6 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-/**
- * @openapi
- * /api/auth/verify:
- *   get:
- *     tags:
- *       - Authentication
- *     summary: Verify authentication token
- *     description: Check if the provided token is valid
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Token is valid
- *       401:
- *         description: Token is invalid
- */
-app.get('/api/auth/verify', (req: Request, res: Response): void => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  const validToken = process.env.API_TOKEN;
-
-  if (!token || token !== validToken) {
-    res.status(401).json({
-      success: false,
-      error: 'Invalid token',
-    });
-    return;
-  }
-
-  res.json({
-    success: true,
-    message: 'Token is valid',
-  });
-});
-
 // API Routes
 app.use('/api/servers', serverRoutes);
 app.use('/api/servers', serverStatusRoutes); // Mount status routes under /api/servers
@@ -291,7 +297,7 @@ app.use('/api/players', playersRoutes); // Player management
 app.use('/api/elo-templates', eloTemplatesRoutes); // ELO calculation templates
 app.use('/api/generation', generationRoutes); // Shared name/code generators (e.g. team names)
 app.use('/api/test', testRoutes); // Test utilities (log markers, etc.)
-app.use('/api/auth', authSteamRoutes); // Steam-based player login (players only)
+app.use('/api/auth', authRoutes); // Authentication (Steam, Keycloak, Discord)
 
 // Serve frontend at /app (built client lives under api/public)
 const publicPath = path.join(__dirname, '..', 'public');
@@ -413,12 +419,31 @@ async function bootstrapServerWebhooks(): Promise<void> {
     return;
   }
 
-  let baseUrl: string;
-  try {
-    baseUrl = await settingsService.requireWebhookUrl();
-  } catch {
-    log.warn('Webhook URL is not configured. Skipping automatic webhook bootstrap.');
-    return;
+  // Resolve webhook base URL from settings, and auto-seed it from FRONTEND_BASE_URL
+  // on first run if it hasn't been configured yet.
+  let baseUrl = await settingsService.getWebhookUrl();
+  if (!baseUrl) {
+    const fromEnv = process.env.FRONTEND_BASE_URL;
+    if (fromEnv && fromEnv.trim().length > 0) {
+      try {
+        await settingsService.setSetting('webhook_url', fromEnv);
+        baseUrl = await settingsService.getWebhookUrl();
+        log.success(
+          `Webhook URL was not configured; initialized from FRONTEND_BASE_URL (${baseUrl})`
+        );
+      } catch (error) {
+        log.warn(
+          'Failed to initialize webhook URL from FRONTEND_BASE_URL; skipping automatic webhook bootstrap.',
+          { error }
+        );
+        return;
+      }
+    } else {
+      log.warn(
+        'Webhook URL is not configured and FRONTEND_BASE_URL is not set. Skipping automatic webhook bootstrap.'
+      );
+      return;
+    }
   }
 
   const enabledServers = await serverService.getAllServers(true);
